@@ -1,0 +1,82 @@
+name: Android Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 8
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '8'
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Decode keystore
+        if: ${{ env.SIGNING_ENABLED == 'true' }}
+        env:
+          SIGNING_ENABLED: ${{ secrets.ANDROID_SIGNING_ENABLED }}
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ "${SIGNING_ENABLED}" = "true" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > keystore.jks
+          fi
+
+      - name: Generate app.properties
+        env:
+          SIGNING_ENABLED: ${{ secrets.ANDROID_SIGNING_ENABLED }}
+          STORE_FILE: keystore.jks
+          STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          MOB_APP_KEY: ${{ secrets.MOB_APP_KEY }}
+          MOB_APP_SECRET: ${{ secrets.MOB_APP_SECRET }}
+        run: |
+          if [ -f app.properties.example ]; then cp app.properties.example app.properties; fi
+          {
+            echo "storeFile=${STORE_FILE}";
+            echo "storePassword=${STORE_PASSWORD}";
+            echo "keyAlias=${KEY_ALIAS}";
+            echo "keyPassword=${KEY_PASSWORD}";
+            echo "appKey=${MOB_APP_KEY}";
+            echo "appSecret=${MOB_APP_SECRET}";
+          } > app.properties
+
+      - name: Grant execute permission for Gradle
+        run: chmod +x gradlew
+
+      - name: Build Release APK
+        run: ./gradlew clean assembleRelease --no-daemon
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-apk
+          path: app/build/outputs/apk/release/*.apk
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: app/build/outputs/apk/release/*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+
