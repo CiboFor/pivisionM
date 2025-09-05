@@ -85,7 +85,7 @@ dependencies {
 
     implementation 'com.makeramen:roundedimageview:2.3.0'
 
-    implementation 'com.commit451:PhotoView:1.2.4'
+    // Removed: com.commit451 PhotoView (not used in codebase)
 
     //升级了tag模块全挂
     //noinspection GradleDependency
